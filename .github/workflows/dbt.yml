@@ -1,0 +1,70 @@
+name: dbt build & docs
+
+on:
+  pull_request:
+    paths:
+      - "models/**"
+      - "seeds/**"
+      - "dbt_project.yml"
+  push:
+    branches: [ main ]
+    paths:
+      - "models/**"
+      - "seeds/**"
+      - "dbt_project.yml"
+
+jobs:
+  run-dbt:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install dbt (duckdb)
+        run: |
+          pip install --upgrade pip
+          pip install dbt-core dbt-duckdb
+
+      - name: Create profiles.yml
+        run: |
+          mkdir -p ./ci_profiles
+          cat > ./ci_profiles/profiles.yml << 'EOF'
+          jaffle_shop:
+            target: dev
+            outputs:
+              dev:
+                type: duckdb
+                path: target/ci.duckdb
+                threads: 4
+          EOF
+
+      - name: dbt deps (if packages.yml exists)
+        run: dbt deps || true
+        env:
+          DBT_PROFILES_DIR: ./ci_profiles
+
+      - name: dbt debug
+        run: dbt debug --profiles-dir ./ci_profiles
+
+      - name: dbt seed
+        run: dbt seed --profiles-dir ./ci_profiles
+
+      - name: dbt compile
+        run: dbt compile --profiles-dir ./ci_profiles
+
+      - name: dbt build (changed only)
+        run: dbt build --select state:modified+ --profiles-dir ./ci_profiles
+
+      - name: dbt docs generate
+        run: dbt docs generate --profiles-dir ./ci_profiles
+
+      - name: Upload docs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dbt-docs
+          path: target/
