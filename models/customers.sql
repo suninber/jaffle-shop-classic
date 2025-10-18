@@ -67,3 +67,6 @@ final as (
 )
 
 select * from final
+
+-- PM note: test change for CI/PR demo
+select * from {{ ref('stg_customers') }}
