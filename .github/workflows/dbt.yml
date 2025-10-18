@@ -2,69 +2,41 @@ name: dbt build & docs
 
 on:
   pull_request:
-    paths:
-      - "models/**"
-      - "seeds/**"
-      - "dbt_project.yml"
-  push:
     branches: [ main ]
-    paths:
-      - "models/**"
-      - "seeds/**"
-      - "dbt_project.yml"
+  workflow_dispatch:
 
 jobs:
-  run-dbt:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: '3.11'
 
       - name: Install dbt (duckdb)
         run: |
-          pip install --upgrade pip
+          python -m pip install --upgrade pip
           pip install dbt-core dbt-duckdb
 
-      - name: Create profiles.yml
-        run: |
-          mkdir -p ./ci_profiles
-          cat > ./ci_profiles/profiles.yml << 'EOF'
-          jaffle_shop:
-            target: dev
-            outputs:
-              dev:
-                type: duckdb
-                path: target/ci.duckdb
-                threads: 4
-          EOF
+      - name: Show versions
+        run: dbt --version
 
-      - name: dbt deps (if packages.yml exists)
-        run: dbt deps || true
-        env:
-          DBT_PROFILES_DIR: ./ci_profiles
+      - name: Install deps
+        run: dbt deps --profiles-dir .
 
-      - name: dbt debug
-        run: dbt debug --profiles-dir ./ci_profiles
+      - name: Seed
+        run: dbt seed --profiles-dir .
 
-      - name: dbt seed
-        run: dbt seed --profiles-dir ./ci_profiles
+      - name: Build (models + tests)
+        run: dbt build --profiles-dir .
 
-      - name: dbt compile
-        run: dbt compile --profiles-dir ./ci_profiles
-
-      - name: dbt build (changed only)
-        run: dbt build --select state:modified+ --profiles-dir ./ci_profiles
-
-      - name: dbt docs generate
-        run: dbt docs generate --profiles-dir ./ci_profiles
+      - name: Generate docs
+        run: dbt docs generate --profiles-dir .
 
       - name: Upload docs artifact
         uses: actions/upload-artifact@v4
         with:
           name: dbt-docs
-          path: target/
+          path: target
